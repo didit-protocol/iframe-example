@@ -191,6 +191,8 @@
   <script>
     // paste your unilink url from the didit console here
     const UNILINK_URL = 'https://verify.didit.me/u/YOUR_WORKFLOW_ID_BASE64';
+    // messages are only accepted from (and sent to) this origin
+    const VERIFICATION_ORIGIN = new URL(UNILINK_URL).origin;
     // open modal
     function openDiditModal() {
       document.getElementById('loading').style.display = 'flex';
@@ -198,19 +200,36 @@
       document.getElementById('didit-modal').classList.add('active');
     }
 
-    // Ask the iframe to show its own localized exit confirmation
+    // The verification page shows its own localized exit confirmation.
+    // It starts answering messages after it has sent its first didit:* event.
+    let iframeReady = false;
+
     function closeDiditModal() {
       const iframe = document.getElementById('didit-iframe');
-      iframe.contentWindow.postMessage({ type: 'didit:request_close' }, '*');
+      if (iframeReady) {
+        iframe.contentWindow.postMessage({ type: 'didit:request_close' }, VERIFICATION_ORIGIN);
+      } else if (confirm('Exit verification?')) {
+        // Fallback: the page is still loading (or failed to load), so confirm here
+        finishClose();
+      }
     }
 
-    // Listen for close_request from the iframe (user confirmed exit)
+    function finishClose() {
+      iframeReady = false;
+      document.getElementById('didit-modal').classList.remove('active');
+      document.getElementById('didit-iframe').src = 'about:blank';
+    }
+
     window.addEventListener('message', function (event) {
-      if (event.data && event.data.type === 'didit:close_request') {
-        document.getElementById('didit-modal').classList.remove('active');
-        document.getElementById('didit-iframe').src = 'about:blank';
-      }
+      // Only trust messages sent by our verification iframe
+      const iframe = document.getElementById('didit-iframe');
+      if (event.source !== iframe.contentWindow || event.origin !== VERIFICATION_ORIGIN) return;
+      if (!event.data || typeof event.data.type !== 'string' || !event.data.type.startsWith('didit:')) return;
+      iframeReady = true;
+      // The user confirmed the exit inside the iframe
+      if (event.data.type === 'didit:close_request') finishClose();
     });
+
   </script>
 </body>
 

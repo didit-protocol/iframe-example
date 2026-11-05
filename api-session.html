@@ -192,6 +192,8 @@
 
   <script>
     let config = {};
+    // origin of the verification page, set from the session url
+    let VERIFICATION_ORIGIN = null;
 
     // load config from server on page load
     async function loadConfig() {
@@ -204,20 +206,36 @@
     }
     loadConfig();
 
-    // Ask the iframe to show its own localized exit confirmation
+    // The verification page shows its own localized exit confirmation.
+    // It starts answering messages after it has sent its first didit:* event.
+    let iframeReady = false;
+
     function closeModal() {
       const iframe = document.getElementById('verification-iframe');
-      iframe.contentWindow.postMessage({ type: 'didit:request_close' }, '*');
+      if (iframeReady) {
+        iframe.contentWindow.postMessage({ type: 'didit:request_close' }, VERIFICATION_ORIGIN);
+      } else if (confirm('Exit verification?')) {
+        // Fallback: the page is still loading (or failed to load), so confirm here
+        finishClose();
+      }
     }
 
-    // Listen for close_request from the iframe (user confirmed exit)
+    function finishClose() {
+      iframeReady = false;
+      document.getElementById('modal-overlay').classList.remove('active');
+      document.getElementById('verification-iframe').src = 'about:blank';
+      document.getElementById('create-btn').disabled = false;
+      document.getElementById('create-btn').textContent = 'Create Session';
+    }
+
     window.addEventListener('message', function (event) {
-      if (event.data && event.data.type === 'didit:close_request') {
-        document.getElementById('modal-overlay').classList.remove('active');
-        document.getElementById('verification-iframe').src = 'about:blank';
-        document.getElementById('create-btn').disabled = false;
-        document.getElementById('create-btn').textContent = 'Create Session';
-      }
+      // Only trust messages sent by our verification iframe
+      const iframe = document.getElementById('verification-iframe');
+      if (event.source !== iframe.contentWindow || event.origin !== VERIFICATION_ORIGIN) return;
+      if (!event.data || typeof event.data.type !== 'string' || !event.data.type.startsWith('didit:')) return;
+      iframeReady = true;
+      // The user confirmed the exit inside the iframe
+      if (event.data.type === 'didit:close_request') finishClose();
     });
 
     async function createSession() {
@@ -239,6 +257,7 @@
 
         const data = await res.json();
         const url = data.url
+        VERIFICATION_ORIGIN = new URL(url).origin;
         document.getElementById('verification-iframe').src = url;
         document.getElementById('modal-overlay').classList.add('active');
         btn.textContent = 'Session Created';
