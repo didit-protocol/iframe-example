@@ -200,22 +200,12 @@
       document.getElementById('didit-modal').classList.add('active');
     }
 
-    // The verification page shows its own localized exit confirmation.
-    // It starts answering messages after it has sent its first didit:* event.
-    let iframeReady = false;
-
+    // Your own Close button: confirm here, so it works whether or not the page has loaded.
     function closeDiditModal() {
-      const iframe = document.getElementById('didit-iframe');
-      if (iframeReady) {
-        iframe.contentWindow.postMessage({ type: 'didit:request_close' }, VERIFICATION_ORIGIN);
-      } else if (confirm('Exit verification?')) {
-        // Fallback: the page is still loading (or failed to load), so confirm here
-        finishClose();
-      }
+      if (confirm('Exit verification?')) finishClose();
     }
 
     function finishClose() {
-      iframeReady = false;
       document.getElementById('didit-modal').classList.remove('active');
       document.getElementById('didit-iframe').src = 'about:blank';
     }
@@ -224,9 +214,8 @@
       // Only trust messages sent by our verification iframe
       const iframe = document.getElementById('didit-iframe');
       if (event.source !== iframe.contentWindow || event.origin !== VERIFICATION_ORIGIN) return;
-      if (!event.data || typeof event.data.type !== 'string' || !event.data.type.startsWith('didit:')) return;
-      iframeReady = true;
-      // The user confirmed the exit inside the iframe
+      if (!event.data || typeof event.data.type !== 'string') return;
+      // The user chose to exit from inside the verification flow
       if (event.data.type === 'didit:close_request') finishClose();
     });
 
